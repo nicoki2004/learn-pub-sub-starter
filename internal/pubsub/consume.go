@@ -139,6 +139,11 @@ func subscribe[T any](
 		return err
 	}
 
+	err = ch.Qos(10, 0, true)
+	if err != nil {
+		return err
+	}
+
 	msgs, err := ch.Consume(
 		queueName, // queue
 		"",        // consumer (vacío para auto-generación)
@@ -152,9 +157,9 @@ func subscribe[T any](
 		return err
 	}
 
-	fmt.Printf("DEBUG: Consumidor registrado en la cola: %s\n", queueName)
+	// fmt.Printf("DEBUG: Consumidor registrado en la cola: %s\n", queueName)
 
-	fmt.Println("DEBUG: Consumidor iniciado con éxito, esperando mensajes...")
+	// fmt.Println("DEBUG: Consumidor iniciado con éxito, esperando mensajes...")
 
 	go func() {
 		defer ch.Close() // Cerramos el canal cuando el loop termine
