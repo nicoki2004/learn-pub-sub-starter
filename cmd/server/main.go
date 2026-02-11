@@ -27,18 +27,27 @@ func main() {
 	}
 
 	// Declare and Bind a Log Queue type: topic
-	_, queue, err := pubsub.DeclareAndBind(
+	// _, queue, err := pubsub.DeclareAndBind(
+	// 	conn,
+	// 	routing.ExchangePerilTopic,
+	// 	routing.GameLogSlug,
+	// 	routing.GameLogSlug+".*",
+	// 	pubsub.SimpleQueueDurable,
+	// )
+	// Subscribe to GOB Queue
+	err = pubsub.SubscribeGob(
 		conn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.SimpleQueueDurable,
+		handlerLog(),
 	)
 	if err != nil {
-		log.Fatalf("could not subscribe to pause: %v", err)
+		log.Fatalf("Error crítico: no se pudo suscribir a los logs: %v", err)
 	}
 
-	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
+	// fmt.Printf("Queue %v declared and bound!\n", queue.Name)
 
 	gamelogic.PrintServerHelp()
 
@@ -80,5 +89,18 @@ func main() {
 		default:
 			fmt.Println("unknown command")
 		}
+	}
+}
+
+func handlerLog() func(gl routing.GameLog) pubsub.AckType {
+	return func(gl routing.GameLog) pubsub.AckType {
+		defer fmt.Println("> ")
+
+		err := gamelogic.WriteLog(gl)
+		if err != nil {
+			fmt.Printf("error writing log: %v\n", err)
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
 	}
 }

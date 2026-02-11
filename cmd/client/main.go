@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -77,7 +79,7 @@ func main() {
 		routing.WarRecognitionsPrefix,
 		routing.WarRecognitionsPrefix+".*",
 		pubsub.SimpleQueueDurable,
-		handlerWar(gs))
+		handlerWar(gs, ch))
 	if err != nil {
 		log.Fatalf("Could not subscribe to pause messages: %v", err)
 	}
@@ -123,7 +125,27 @@ func main() {
 
 			continue
 		case "spam":
-			fmt.Printf("Spamming not allowed yet!\n")
+			// fmt.Printf("Spamming not allowed yet!\n")
+
+			if len(words) == 2 {
+				amount, err := strconv.Atoi(words[1])
+				if err != nil {
+					fmt.Printf("Error: '%s' no es un número válido\n", words[1])
+					continue
+				}
+				for range amount {
+					logMessage := gamelogic.GetMaliciousLog()
+					err := pubsub.PublishGameLog(ch, gs.GetUsername(), routing.GameLog{
+						CurrentTime: time.Now().UTC(),
+						Username:    gs.GetUsername(),
+						Message:     logMessage,
+					})
+					if err != nil {
+						fmt.Printf("error publishing malicious log: %s\n", err)
+					}
+
+				}
+			}
 
 		case "status":
 			gs.CommandStatus()
@@ -190,11 +212,13 @@ func handlerMove(gs *gamelogic.GameState, ch *amqp.Channel) func(gamelogic.ArmyM
 	}
 }
 
-func handlerWar(gs *gamelogic.GameState) func(rOw gamelogic.RecognitionOfWar) pubsub.AckType {
+func handlerWar(gs *gamelogic.GameState, ch *amqp.Channel) func(rOw gamelogic.RecognitionOfWar) pubsub.AckType {
 	return func(dw gamelogic.RecognitionOfWar) pubsub.AckType {
-		defer log.Println(" >")
+		defer log.Println("> ")
 
-		warOutcome, _, _ := gs.HandleWar(dw)
+		warOutcome, winner, loser := gs.HandleWar(dw)
+		fmt.Printf("Outcome: %v", warOutcome)
+		logMessage := ""
 
 		switch warOutcome {
 		case gamelogic.WarOutcomeNotInvolved:
@@ -202,14 +226,31 @@ func handlerWar(gs *gamelogic.GameState) func(rOw gamelogic.RecognitionOfWar) pu
 		case gamelogic.WarOutcomeNoUnits:
 			return pubsub.NackDiscard
 		case gamelogic.WarOutcomeOpponentWon:
-			return pubsub.Ack
+			logMessage = fmt.Sprintf("%s, won a war against %s", winner, loser)
+			// return pubsub.Ack
 		case gamelogic.WarOutcomeYouWon:
-			return pubsub.Ack
+			logMessage = fmt.Sprintf("%s, won a war against %s", winner, loser)
+			// return pubsub.Ack
 		case gamelogic.WarOutcomeDraw:
-			return pubsub.Ack
+			logMessage = fmt.Sprintf("A war between %s and %s resulted in a draw", winner, loser)
+			// return pubsub.Ack
 		default:
 			fmt.Println("Error in war")
 			return pubsub.NackDiscard
 		}
+
+		gLog := routing.GameLog{
+			CurrentTime: time.Now().UTC(),
+			Message:     logMessage,
+			Username:    gs.GetUsername(),
+		}
+
+		err := pubsub.PublishGameLog(ch, dw.Attacker.Username, gLog)
+		if err != nil {
+			fmt.Printf("Error publishing log: %v\n", err)
+			return pubsub.NackRequeue
+		}
+
+		return pubsub.Ack
 	}
 }
