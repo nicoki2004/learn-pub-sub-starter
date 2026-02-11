@@ -34,7 +34,7 @@ func ClientWelcome() (string, error) {
 	}
 	username := words[0]
 	fmt.Printf("Welcome, %s!\n", username)
-	PrintClientHelp()
+	// PrintClientHelp()
 	return username, nil
 }
 
